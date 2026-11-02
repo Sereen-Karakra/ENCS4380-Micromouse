@@ -1,10 +1,182 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Micromouse Project</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ENCS4380 - Dynamic Characteristics Toolkit</title>
+    <!-- Chart.js for Interactive Plotting -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
+        h1, h2 { color: #1a365d; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; }
+        input[type=range], select { width: 100%; padding: 5px; }
+        .chart-container { position: relative; height: 350px; margin-bottom: 20px; }
+        .prediction-box { background: #eeb20915; border-left: 4px solid #d69e2e; padding: 15px; border-radius: 4px; }
+        .metrics { display: flex; gap: 20px; font-size: 0.95em; background: #edf2f7; padding: 10px; border-radius: 5px; }
+    </style>
 </head>
 <body>
-    <h1>Welcome to Our Micromouse Project</h1>
-    <p>ENCS4380 - Birzeit University</p>
+
+    <div class="card">
+        <h1>Dynamic Characteristics Interactive Toolkit</h1>
+        <p><b>Course:</b> ENCS4380 - Dynamic Systems & Control | <b>Birzeit University</b></p>
+    </div>
+
+    <!-- MODULE 1: MAYAM'S WORK -->
+    <div class="card">
+        <h2>Module 1: First-Order Time Response (Thermometer Model)</h2>
+        <p>Developer: <b>Maysam Abu Eid</b></p>
+        
+        <!-- Controls -->
+        <div class="controls">
+            <div>
+                <label for="gainK">Gain (K): <span id="valK">1.0</span></label>
+                <input type="range" id="gainK" min="0.5" max="5.0" step="0.1" value="1.0">
+            </div>
+            <div>
+                <label for="tau">Time Constant (&tau;) [s]: <span id="valTau">2.0</span></label>
+                <input type="range" id="tau" min="0.5" max="10.0" step="0.5" value="2.0">
+            </div>
+            <div>
+                <label for="stepAmp">Input Amplitude (A) / Ramp Rate (r): <span id="valA">10.0</span></label>
+                <input type="range" id="stepAmp" min="1.0" max="20.0" step="1.0" value="10.0">
+            </div>
+            <div>
+                <label for="inputType">Input Signal Type:</label>
+                <select id="inputType">
+                    <option value="step">Step Input</option>
+                    <option value="ramp">Ramp Input</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Predict Then Check -->
+        <div class="prediction-box">
+            <h4>💡 Predict, Then Check!</h4>
+            <p id="predictQuestion">Q: What percentage of final value KA will the response reach at t = &tau;?</p>
+            <button onclick="checkPrediction()">Reveal Answer</button>
+            <span id="predictAnswer" style="display:none; font-weight:bold; margin-left:10px; color:#2b6cb0;"></span>
+        </div>
+
+        <br>
+        <!-- Metrics output -->
+        <div class="metrics">
+            <div><b>System Formula:</b> G(s) = K / (&tau;s + 1)</div>
+            <div><b>Validation @ t=&tau;:</b> <span id="checkTau">-</span></div>
+            <div><b>Validation @ t=3&tau;:</b> <span id="check3Tau">-</span></div>
+        </div>
+
+        <!-- Main Time Response Chart -->
+        <h3>1. Time Domain Response</h3>
+        <div class="chart-container">
+            <canvas id="timeChart"></canvas>
+        </div>
+
+        <!-- Error-Fraction Semi-Log Plot -->
+        <h3>2. Error-Fraction Logarithmic Plot [ln(e(t)/e(0)) vs t]</h3>
+        <div class="chart-container">
+            <canvas id="errorChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let timeChart, errorChart;
+
+        function updatePlots() {
+            const K = parseFloat(document.getElementById('gainK').value);
+            const tau = parseFloat(document.getElementById('tau').value);
+            const A = parseFloat(document.getElementById('stepAmp').value);
+            const type = document.getElementById('inputType').value;
+
+            document.getElementById('valK').innerText = K.toFixed(1);
+            document.getElementById('valTau').innerText = tau.toFixed(1);
+            document.getElementById('valA').innerText = A.toFixed(1);
+
+            const tMax = Math.max(15, tau * 5);
+            const points = 100;
+            const dt = tMax / points;
+
+            let timeLabels = [], inputData = [], outputData = [], errorLogData = [];
+
+            for (let i = 0; i <= points; i++) {
+                let t = i * dt;
+                timeLabels.push(t.toFixed(1));
+
+                if (type === 'step') {
+                    let u = A;
+                    let y = K * A * (1 - Math.exp(-t / tau));
+                    inputData.push(u);
+                    outputData.push(y);
+                    
+                    // Error fraction: e(t)/e(0) = exp(-t/tau) -> ln = -t/tau
+                    let errRatio = Math.exp(-t / tau);
+                    errorLogData.push(Math.log(errRatio));
+                } else { // Ramp
+                    let u = A * t;
+                    let y = K * A * (t - tau + tau * Math.exp(-t / tau));
+                    inputData.push(u);
+                    outputData.push(y);
+                    
+                    let err = u - y;
+                    errorLogData.push(err > 0 ? Math.log(err) : 0);
+                }
+            }
+
+            // Validation Calculations
+            if(type === 'step') {
+                const yTau = K * A * (1 - Math.exp(-1));
+                const y3Tau = K * A * (1 - Math.exp(-3));
+                document.getElementById('checkTau').innerText = `${yTau.toFixed(2)} (${((yTau/(K*A))*100).toFixed(1)}% of KA) [Target: 63.2%]`;
+                document.getElementById('check3Tau').innerText = `${y3Tau.toFixed(2)} (${((y3Tau/(K*A))*100).toFixed(1)}% of KA) [Target: 95.0%]`;
+            } else {
+                document.getElementById('checkTau').innerText = `Ramp Lag = ${tau.toFixed(1)}s`;
+                document.getElementById('check3Tau').innerText = `Steady-state Error = ${(A * tau).toFixed(2)}`;
+            }
+
+            // Draw/Update Time Chart
+            if (timeChart) timeChart.destroy();
+            timeChart = new Chart(document.getElementById('timeChart'), {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [
+                        { label: 'Input Signal x(t)', data: inputData, borderColor: '#e53e3e', borderDash: [5, 5], fill: false },
+                        { label: 'Sensor Output y(t)', data: outputData, borderColor: '#3182ce', borderWidth: 2, fill: false }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Time (seconds)' } }, y: { title: { display: true, text: 'Response Value' } } } }
+            });
+
+            // Draw/Update Log Error Chart
+            if (errorChart) errorChart.destroy();
+            errorChart = new Chart(document.getElementById('errorChart'), {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [
+                        { label: 'ln[Error Fraction]', data: errorLogData, borderColor: '#805ad5', borderWidth: 2, fill: false }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Time (seconds)' } }, y: { title: { display: true, text: 'Natural Log of Error' } } } }
+            });
+        }
+
+        function checkPrediction() {
+            const ans = document.getElementById('predictAnswer');
+            ans.style.display = 'inline';
+            ans.innerText = "Exactly 63.2%! Because y(τ) = KA(1 - e^-1) = 0.632 * KA.";
+        }
+
+        document.getElementById('gainK').addEventListener('input', updatePlots);
+        document.getElementById('tau').addEventListener('input', updatePlots);
+        document.getElementById('stepAmp').addEventListener('input', updatePlots);
+        document.getElementById('inputType').addEventListener('change', updatePlots);
+
+        // Initial Load
+        updatePlots();
+    </script>
 </body>
 </html>
