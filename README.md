@@ -10,7 +10,7 @@ Interactive web toolkit that makes the dynamic characteristics of sensors visibl
 |---|---|---|---|
 | Maysam Abu Eid | Module 1: First-order time response | #2 | Done (live) |
 | Dania Abu Ayyash | Module 2: First-order frequency response | | In progress |
-| Sereen Karakra | Module 3: Second-order response | | Done |
+| Sereen Karakra | Module 3: Second-order response | #1 | Done |
 | Raneem Khawaja | Module 4: "Guess the sensor" challenge | | Planned |
 | Masa Awad | Bonus work | | Planned |
 
