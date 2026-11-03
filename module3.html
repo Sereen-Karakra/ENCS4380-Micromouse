@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 3 - Second-Order Response</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background:#f4f7f6; color:#333; }
+h1, h2, h3 { color:#1a365d; }
+.card { background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,.1); margin-bottom:20px; }
+.controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; margin-bottom:15px; }
+label { font-weight:bold; display:block; margin-bottom:5px; }
+input[type=range] { width:100%; }
+.chart-container { position:relative; height:320px; margin-bottom:20px; }
+.grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px; }
+.prediction-box { background:#eeb20915; border-left:4px solid #d69e2e; padding:15px; border-radius:4px; }
+.metrics { display:flex; flex-wrap:wrap; gap:10px 24px; background:#edf2f7; padding:10px; border-radius:5px; font-size:.95em; }
+.ss { font-family:Consolas,monospace; background:#edf2f7; padding:10px; border-radius:5px; overflow-x:auto; }
+button { padding:6px 12px; margin:2px; cursor:pointer; }
+table { border-collapse:collapse; width:100%; display:block; overflow-x:auto; }
+th, td { border:1px solid #cbd5e0; padding:6px 10px; text-align:left; }
+.pass { color:#2f855a; font-weight:bold; } .fail { color:#c53030; font-weight:bold; }
+</style>
+</head>
+<body>
+<div class="card">
+  <p><a href="index.html">&larr; Back to toolkit</a></p>
+  <h1>Module 3: Second-Order Response (Mass-Spring-Damper)</h1>
+  <p>Developer: <b>Sereen Karakra</b></p>
+  <p>Model: m&middot;x&Prime; + b&middot;x&prime; + k&middot;x = F &nbsp;|&nbsp; G(s) = K&omega;<sub>n</sub>&sup2; / (s&sup2; + 2&zeta;&omega;<sub>n</sub>s + &omega;<sub>n</sub>&sup2;), K = 1/k</p>
+
+  <div class="controls">
+    <div><label>Mass m [kg]: <span id="vm"></span></label><input type="range" id="m" min="0.1" max="5" step="0.1" value="1"></div>
+    <div><label>Damping b [N&middot;s/m]: <span id="vb"></span></label><input type="range" id="b" min="0" max="12" step="0.1" value="2"></div>
+    <div><label>Stiffness k [N/m]: <span id="vk"></span></label><input type="range" id="k" min="0.5" max="20" step="0.5" value="4"></div>
+    <div><label>Step force F [N]: <span id="vF"></span></label><input type="range" id="F" min="1" max="10" step="1" value="1"></div>
+  </div>
+
+  <div class="prediction-box">
+    <h4>Predict, then check</h4>
+    <p>If you increase the damping b (m and k fixed), what happens to the overshoot?</p>
+    <button onclick="guess('up')">Increases</button>
+    <button onclick="guess('down')">Decreases</button>
+    <button onclick="guess('same')">Stays the same</button>
+    <p id="predAns" style="font-weight:bold;color:#2b6cb0"></p>
+  </div>
+  <br>
+  <div class="metrics">
+    <div><b>&omega;<sub>n</sub></b> = <span id="oWn"></span> rad/s</div>
+    <div><b>&zeta;</b> = <span id="oZ"></span></div>
+    <div><b>Case:</b> <span id="oCase"></span></div>
+    <div><b>DC gain K:</b> <span id="oK"></span></div>
+    <div><b>Final value:</b> <span id="oFinal"></span></div>
+  </div>
+  <div class="metrics" style="margin-top:10px">
+    <div><b>Rise time (10-90%):</b> <span id="mRise"></span></div>
+    <div><b>Peak time:</b> <span id="mPeak"></span></div>
+    <div><b>Overshoot:</b> <span id="mOS"></span></div>
+    <div><b>Settling time (2%):</b> <span id="mSet"></span></div>
+  </div>
+  <p style="font-size:.9em">Metrics are read from the plotted curve. Theory for comparison: overshoot = <span id="tOS"></span>, peak time = <span id="tPeak"></span>.</p>
+
+  <h3>1. Step response x(t)</h3>
+  <div class="chart-container"><canvas id="stepChart"></canvas></div>
+
+  <div class="grid2">
+    <div><h3>2. Poles in the s-plane</h3><div class="chart-container"><canvas id="sChart"></canvas></div></div>
+    <div><h3>3. Phase plane (x<sub>1</sub>, x<sub>2</sub>)</h3><div class="chart-container"><canvas id="pChart"></canvas></div></div>
+  </div>
+
+  <h3>4. State-space panel</h3>
+  <p>x<sub>1</sub> = x (displacement), x<sub>2</sub> = x&prime; (velocity)</p>
+  <div class="ss" id="ssBox"></div>
+  <p id="eigLine"></p>
+  <p style="font-size:.9em">Underdamped gives a spiral in the phase plane, overdamped gives no spiral.</p>
+
+  <h3>5. Validation checks</h3>
+  <table>
+    <thead><tr><th>Check</th><th>Expected</th><th>Our value</th><th>Result</th></tr></thead>
+    <tbody id="valBody"></tbody>
+  </table>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 3) => Number.isFinite(x) ? x.toFixed(d) : 'n/a';
+
+// Normalized unit-step response s(t) of a second-order system (DC gain 1)
+function secondOrderStep(zeta, wn, t) {
+  if (zeta < 1 - 1e-9) {
+    const wd = wn * Math.sqrt(1 - zeta * zeta), phi = Math.acos(zeta);
+    return 1 - Math.exp(-zeta * wn * t) / Math.sqrt(1 - zeta * zeta) * Math.sin(wd * t + phi);
+  }
+  if (zeta < 1 + 1e-9) return 1 - (1 + wn * t) * Math.exp(-wn * t);
+  const r = wn * Math.sqrt(zeta * zeta - 1), s1 = -zeta * wn + r, s2 = -zeta * wn - r;
+  return 1 + (s2 * Math.exp(s1 * t) - s1 * Math.exp(s2 * t)) / (s1 - s2);
+}
+
+function poles(zeta, wn) {
+  if (zeta < 1) return [[-zeta * wn, wn * Math.sqrt(1 - zeta * zeta)], [-zeta * wn, -wn * Math.sqrt(1 - zeta * zeta)]];
+  const r = wn * Math.sqrt(zeta * zeta - 1);
+  return [[-zeta * wn + r, 0], [-zeta * wn - r, 0]];
+}
+
+// Eigenvalues of a 2x2 matrix A: lambda^2 - tr*lambda + det = 0
+function eig2(A) {
+  const tr = A[0][0] + A[1][1], det = A[0][0] * A[1][1] - A[0][1] * A[1][0], d = tr * tr - 4 * det;
+  if (d >= 0) return [[(tr + Math.sqrt(d)) / 2, 0], [(tr - Math.sqrt(d)) / 2, 0]];
+  return [[tr / 2, Math.sqrt(-d) / 2], [tr / 2, -Math.sqrt(-d) / 2]];
+}
+
+// Metrics read from the sampled normalized curve (final value = 1)
+function metrics(zeta, wn, tMax, N = 4000) {
+  const ts = [], ys = [];
+  for (let i = 0; i <= N; i++) { const t = tMax * i / N; ts.push(t); ys.push(secondOrderStep(zeta, wn, t)); }
+  const cross = lvl => { for (let i = 1; i <= N; i++) if (ys[i] >= lvl) return ts[i - 1] + (lvl - ys[i - 1]) / (ys[i] - ys[i - 1]) * (ts[i] - ts[i - 1]); return NaN; };
+  let iMax = 0; ys.forEach((y, i) => { if (y > ys[iMax]) iMax = i; });
+  const over = Math.max(0, ys[iMax] - 1) * 100;
+  let last = -1; for (let i = 0; i <= N; i++) if (Math.abs(ys[i] - 1) > 0.02) last = i;
+  const settle = last === N ? NaN : ts[last + 1] || 0;
+  return { rise: cross(0.9) - cross(0.1), peak: over > 1e-6 ? ts[iMax] : NaN, over, settle, maxY: ys[iMax] };
+}
+
+function horizon(zeta, wn) {
+  if (zeta <= 0) return 6 * 2 * Math.PI / wn;
+  const sigma = zeta < 1 ? zeta * wn : wn * (zeta - Math.sqrt(zeta * zeta - 1));
+  return Math.max(6 / sigma, 2 * Math.PI / wn);
+}
+
+// RK4 on x' = A x + B F
+function rk4Path(A, B, F, tMax, N = 600) {
+  const f = x => [A[0][0] * x[0] + A[0][1] * x[1] + B[0] * F, A[1][0] * x[0] + A[1][1] * x[1] + B[1] * F];
+  const h = tMax / N; let x = [0, 0]; const pts = [{ x: 0, y: 0 }];
+  for (let i = 0; i < N; i++) {
+    const k1 = f(x), k2 = f(x.map((v, j) => v + h / 2 * k1[j])), k3 = f(x.map((v, j) => v + h / 2 * k2[j])), k4 = f(x.map((v, j) => v + h * k3[j]));
+    x = x.map((v, j) => v + h / 6 * (k1[j] + 2 * k2[j] + 2 * k3[j] + k4[j]));
+    pts.push({ x: x[0], y: x[1] });
+  }
+  return pts;
+}
+
+const axis = t => ({ title: { display: true, text: t } });
+const stepChart = new Chart($('stepChart'), { type: 'line', data: { datasets: [
+  { label: 'Final value', data: [], borderColor: '#e53e3e', borderDash: [5, 5], pointRadius: 0, borderWidth: 1 },
+  { label: 'x(t)', data: [], borderColor: '#3182ce', borderWidth: 2, pointRadius: 0 },
+  { label: 'Peak', data: [], type: 'scatter', borderColor: '#d69e2e', backgroundColor: '#d69e2e', pointRadius: 6 }
+] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { type: 'linear', title: axis('Time (s)').title }, y: { title: axis('Displacement x (m)').title } } } });
+
+const sChart = new Chart($('sChart'), { type: 'scatter', data: { datasets: [
+  { label: 'Poles', data: [], pointStyle: 'crossRot', pointRadius: 10, borderWidth: 3, borderColor: '#c53030' }
+] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { title: axis('Real').title }, y: { title: axis('Imaginary').title } } } });
+
+const pChart = new Chart($('pChart'), { type: 'scatter', data: { datasets: [
+  { label: 'Path (x1, x2)', data: [], showLine: true, borderColor: '#805ad5', pointRadius: 0, borderWidth: 2 }
+] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { title: axis('x1 = x (m)').title }, y: { title: axis('x2 = velocity (m/s)').title } } } });
+
+function update() {
+  const m = +$('m').value, b = +$('b').value, k = +$('k').value, F = +$('F').value;
+  $('vm').innerText = m.toFixed(1); $('vb').innerText = b.toFixed(1); $('vk').innerText = k.toFixed(1); $('vF').innerText = F.toFixed(0);
+
+  const wn = Math.sqrt(k / m), zeta = b / (2 * Math.sqrt(k * m)), K = 1 / k, fin = K * F;
+  const cs = Math.abs(zeta - 1) < 1e-9 ? 'Critically damped' : zeta < 1 ? 'Underdamped' : 'Overdamped';
+  $('oWn').innerText = fmt(wn); $('oZ').innerText = fmt(zeta); $('oCase').innerText = cs;
+  $('oK').innerText = fmt(K, 4); $('oFinal').innerText = fmt(fin, 4) + ' m';
+
+  const tMax = horizon(zeta, wn), mt = metrics(zeta, wn, tMax);
+  $('mRise').innerText = fmt(mt.rise) + ' s';
+  $('mPeak').innerText = isNaN(mt.peak) ? 'none (no overshoot)' : fmt(mt.peak) + ' s';
+  $('mOS').innerText = fmt(mt.over, 2) + ' %';
+  $('mSet').innerText = isNaN(mt.settle) ? 'does not settle' : fmt(mt.settle) + ' s';
+  const osT = zeta > 0 && zeta < 1 ? Math.exp(-Math.PI * zeta / Math.sqrt(1 - zeta * zeta)) * 100 : (zeta === 0 ? 100 : 0);
+  $('tOS').innerText = fmt(osT, 2) + ' %';
+  $('tPeak').innerText = zeta < 1 ? fmt(Math.PI / (wn * Math.sqrt(1 - zeta * zeta))) + ' s' : 'none';
+
+  // Step response
+  const N = 500, curve = [];
+  for (let i = 0; i <= N; i++) { const t = tMax * i / N; curve.push({ x: t, y: fin * secondOrderStep(zeta, wn, t) }); }
+  stepChart.data.datasets[0].data = [{ x: 0, y: fin }, { x: tMax, y: fin }];
+  stepChart.data.datasets[1].data = curve;
+  stepChart.data.datasets[2].data = isNaN(mt.peak) ? [] : [{ x: mt.peak, y: fin * mt.maxY }];
+  stepChart.update();
+
+  // Poles and state space
+  const A = [[0, 1], [-k / m, -b / m]], B = [0, 1 / m];
+  const ev = eig2(A), pl = poles(zeta, wn);
+  const lim = Math.max(1, wn * 1.3);
+  sChart.data.datasets[0].data = pl.map(p => ({ x: p[0], y: p[1] }));
+  sChart.options.scales.x.min = -Math.max(lim, Math.abs(pl[1][0]) * 1.2); sChart.options.scales.x.max = lim * 0.3;
+  sChart.options.scales.y.min = -lim; sChart.options.scales.y.max = lim;
+  sChart.update();
+
+  const cx = e => e[1] === 0 ? fmt(e[0]) : `${fmt(e[0])} ${e[1] > 0 ? '+' : '-'} j${fmt(Math.abs(e[1]))}`;
+  $('ssBox').innerHTML = `A = [ 0 &nbsp; 1 ; ${fmt(-k / m, 2)} &nbsp; ${fmt(-b / m, 2)} ]<br>B = [ 0 ; ${fmt(1 / m, 2)} ]<sup>T</sup>, &nbsp; C = [ 1 &nbsp; 0 ]`;
+  $('eigLine').innerHTML = `<b>Eigenvalues of A:</b> ${cx(ev[0])}, ${cx(ev[1])} &nbsp;|&nbsp; <b>Poles of G(s):</b> ${cx(pl[0])}, ${cx(pl[1])} &nbsp;&rarr; same numbers`;
+  pChart.data.datasets[0].data = rk4Path(A, B, F, tMax);
+  pChart.update();
+}
+
+// Predict then check
+function guess(g) {
+  $('predAns').innerText = (g === 'down' ? 'Correct. ' : 'Not quite. ') + 'More damping lowers the overshoot (overshoot = exp(-pi*zeta/sqrt(1-zeta^2))), and zeta grows with b. Now move the b slider and watch.';
+}
+
+// Validation checks (independent of the sliders)
+function runValidation() {
+  const rows = [];
+  const add = (name, exp, got, ok) => rows.push(`<tr><td>${name}</td><td>${exp}</td><td>${got}</td><td class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'FAIL'}</td></tr>`);
+  const a = metrics(0.5, 1, horizon(0.5, 1)).over;
+  add('4. zeta = 0.5 overshoot', '16.3 %', fmt(a, 2) + ' %', Math.abs(a - 16.3) < 0.1);
+  const c = metrics(1, 1, horizon(1, 1)).over;
+  add('5. zeta = 1 overshoot', '0 % (none)', fmt(c, 2) + ' %', c < 1e-6);
+  const A = [[0, 1], [-4, -2]], ev = eig2(A), p = poles(0.5, 2);
+  const ok = Math.abs(ev[0][0] + 1) < 1e-6 && Math.abs(Math.abs(ev[0][1]) - 1.732) < 1e-3 && Math.abs(ev[0][0] - p[0][0]) < 1e-9 && Math.abs(ev[0][1] - p[0][1]) < 1e-9;
+  add('6. m=1, b=2, k=4: eigenvalues of A', '-1 &plusmn; j1.732 = poles', `${fmt(ev[0][0])} &plusmn; j${fmt(Math.abs(ev[0][1]))}`, ok);
+  $('valBody').innerHTML = rows.join('');
+}
+
+['m', 'b', 'k', 'F'].forEach(id => $(id).addEventListener('input', update));
+runValidation();
+update();
+</script>
+</body>
+</html>
