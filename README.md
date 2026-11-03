@@ -40,7 +40,21 @@ Planned (due Thu 12 Nov 2026).
 
 ## Screenshots
 
-_Add screenshots here after each module is final._
+<img width="1528" height="294" alt="image" src="https://github.com/user-attachments/assets/5d845cf1-8dbd-4ba4-844e-ce5fd11b898d" />
+
+<img width="1540" height="591" alt="image" src="https://github.com/user-attachments/assets/39edc31c-b975-40eb-8518-4b3b8ba8250d" />
+
+<img width="1525" height="572" alt="image" src="https://github.com/user-attachments/assets/243c2e76-2b94-48f2-af9b-3d14dadfd61a" />
+<img width="626" height="288" alt="image" src="https://github.com/user-attachments/assets/cf34041f-bfd3-41f7-a566-e8cb55f3a2e5" />
+
+
+<img width="1526" height="171" alt="image" src="https://github.com/user-attachments/assets/a58bdf24-859d-4d20-8fdf-4e5b36e23a57" />
+<img width="1521" height="665" alt="image" src="https://github.com/user-attachments/assets/55b234f3-4785-4534-9dd3-610fee6af890" />
+<img width="1519" height="577" alt="image" src="https://github.com/user-attachments/assets/69a150d4-3ad7-4d56-a904-991f9cfe8010" />
+
+<img width="648" height="282" alt="image" src="https://github.com/user-attachments/assets/10816c70-94c1-4ab8-97c2-a3715dfd5f92" />
+
+
 
 ## Technical notes
 
